@@ -182,6 +182,21 @@
   button.secondary { background: #2a3140; color: var(--text); }
   .shake { animation: shake 0.35s; }
   @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+  #diagLog {
+    position: fixed; top: 72px; left: 50%; transform: translateX(-50%);
+    background: rgba(10, 18, 28, 0.94); border: 1px solid rgba(255, 122, 46, 0.6);
+    border-radius: 10px; padding: 12px 18px; z-index: 150;
+    max-width: 520px; text-align: center;
+    box-shadow: 0 0 20px rgba(255, 122, 46, 0.25);
+    opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  #diagLog.show { opacity: 1; pointer-events: auto; }
+  #diagLog .diag-label {
+    font-size: 10px; letter-spacing: 1.5px; color: #ff7a2e; text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  #diagLog .diag-text { font-size: 14px; color: #eef2f7; line-height: 1.4; }
+  #diagLog .diag-hint { font-size: 11px; color: #8b97a8; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -215,6 +230,11 @@
   <h2>MCT REPAIRS</h2>
   <p>Full-screen service bay time trial. Dig through the workbench, cycle the MCT views, and install the required parts as fast as you can.</p>
   <button id="startBtn">Start Game</button>
+</div>
+<div id="diagLog">
+  <div class="diag-label">Diagnostic Log</div>
+  <div class="diag-text" id="diagText"></div>
+  <div class="diag-hint">Cross-check the Required Parts list · dismisses in 6s</div>
 </div>
 <div class="screen" id="roundClear"><h2>Round Clear</h2><p id="roundMsg">Systems restored.</p><button id="nextBtn">Next Round</button></div>
 <div class="screen" id="victory"><h2>All Repairs Complete</h2><p id="victoryMsg">MCT fleet is operational.</p><button id="againBtn">Play Again</button></div>
@@ -269,18 +289,27 @@ const ALL_PARTS = [
 ];
 
 const PUZZLES = [
-  { name: 'Basic Drive', parts: ['wheel', 'bumper', 'lights', 'cage'], count: 4 },
-  { name: 'Front Fit', parts: ['bumper', 'hood', 'steer', 'skirt'], count: 4 },
-  { name: 'Rear Check', parts: ['lights', 'axle', 'motor', 'fender'], count: 4 },
-  { name: 'Chassis & Power', parts: ['wheel', 'skirt', 'battery', 'harness', 'bumper', 'lights', 'seat', 'brake'], count: 8 },
-  { name: 'Full Exterior', parts: ['bumper', 'hood', 'fender', 'skirt', 'lights', 'cage', 'steer', 'wheel'], count: 8 },
-  { name: 'Complete Overhaul', parts: ['wheel', 'brake', 'skirt', 'fender', 'bumper', 'hood', 'steer', 'lights', 'axle', 'motor', 'battery', 'ecu'], count: 12 },
-  { name: 'Systems Full', parts: ['cage', 'seat', 'swheel', 'battery', 'relay', 'harness', 'wheel', 'brake', 'bumper', 'lights', 'pump', 'ecu'], count: 12 },
-  { name: 'Suspension Check', parts: ['coilover', 'wheel', 'brake', 'skirt'], count: 4 },
-  { name: 'Cabin Fit', parts: ['steer', 'pedals', 'cluster', 'mirror', 'seat', 'swheel', 'cage', 'strobe'], count: 8 },
-  { name: 'Power & Chassis', parts: ['fusebox', 'fan', 'battery', 'harness', 'steerrack', 'coilover', 'motor', 'axle', 'hitch', 'lights', 'wheel', 'ecu'], count: 12 },
-  { name: 'Fluids Service', parts: ['reservoir', 'fluidfilter', 'hose', 'mastercyl', 'moisture', 'radiator', 'valves', 'compressor'], count: 8 },
-  { name: 'Cargo Deck', parts: ['anchor', 'winch', 'skidplate', 'barrier', 'leafspring', 'tailgate', 'auxbattery', 'triangle', 'hitch', 'lights', 'cage', 'wheel'], count: 12 }
+  { name: 'Basic Drive', parts: ['wheel', 'bumper', 'lights', 'cage'], count: 4, diag: 'Warning: Front impact detected. Roll cage integrity compromised. Rear lighting offline.' },
+  { name: 'Front Fit', parts: ['bumper', 'hood', 'steer', 'skirt'], count: 4, diag: 'Alert: Nose section damage. Steering response delayed. Side skirt clearance low.' },
+  { name: 'Rear Check', parts: ['lights', 'axle', 'motor', 'fender'], count: 4, diag: 'Caution: Drive motor fault. Rear axle play detected. Taillights intermittent. Fender clearance reduced.' },
+  { name: 'Suspension Check', parts: ['coilover', 'wheel', 'brake', 'skirt'], count: 4, diag: 'Alert: Suspension bottoming. Coilover leak detected. Brake response soft. Side clearance low.' },
+  { name: 'Quick Cabin', parts: ['steer', 'pedals', 'cluster', 'mirror'], count: 4, diag: 'Notice: Cabin controls sluggish. Pedal travel long. Cluster blank. Mirror loose.' },
+  { name: 'Power Quick', parts: ['battery', 'harness', 'relay', 'ecu'], count: 4, diag: 'Caution: Battery voltage drop. Relay chatter. Harness short. ECU communication lost.' },
+  { name: 'Fluid Spot', parts: ['reservoir', 'hose', 'fluidfilter', 'moisture'], count: 4, diag: 'Alert: Fluid leak detected. Reservoir low. Hose weep. Moisture in air line.' },
+  { name: 'Cargo Quick', parts: ['hitch', 'tailgate', 'anchor', 'triangle'], count: 4, diag: 'Notice: Hitch pin missing. Tailgate latch failed. Anchor ring loose. Triangle not stowed.' },
+  { name: 'Chassis & Power', parts: ['wheel', 'skirt', 'battery', 'harness', 'bumper', 'lights', 'seat', 'brake'], count: 8, diag: 'Critical: Multiple chassis faults. Battery voltage unstable. Wiring harness short. Braking uneven. Seat mount loose.' },
+  { name: 'Full Exterior', parts: ['bumper', 'hood', 'fender', 'skirt', 'lights', 'cage', 'steer', 'wheel'], count: 8, diag: 'Notice: Exterior panel damage across front and sides. Roll cage misaligned. Steering free-play high.' },
+  { name: 'Cabin Fit', parts: ['steer', 'pedals', 'cluster', 'mirror', 'seat', 'swheel', 'cage', 'strobe'], count: 8, diag: 'Notice: Cabin controls unresponsive. Pedal travel excessive. Instrument cluster blank. Mirror misaligned. Beacon offline.' },
+  { name: 'Fluids Service', parts: ['reservoir', 'fluidfilter', 'hose', 'mastercyl', 'moisture', 'radiator', 'valves', 'compressor'], count: 8, diag: 'Caution: Fluid pressure low. Reservoir level critical. Radiator flow restricted. Air system moisture high. Compressor cycling hard.' },
+  { name: 'Suspension Mid', parts: ['coilover', 'wheel', 'brake', 'leafspring', 'skirt', 'fender', 'axle', 'snorkel'], count: 8, diag: 'Alert: Suspension and intake faults. Leaf spring cracked. Coilover leak. Axle play. Snorkel loose.' },
+  { name: 'Rear Systems', parts: ['lights', 'motor', 'axle', 'hitch', 'tailgate', 'barrier', 'auxbattery', 'compressor'], count: 8, diag: 'Caution: Rear systems degraded. Motor overtemp. Hitch pin missing. Aux battery dead. Barrier bent.' },
+  { name: 'Front Systems', parts: ['bumper', 'hood', 'steer', 'steerrack', 'fan', 'radiator', 'winch', 'skidplate'], count: 8, diag: 'Warning: Front end damage. Steering rack binding. Cooling fan seized. Winch offline. Skid plate bent.' },
+  { name: 'Complete Overhaul', parts: ['wheel', 'brake', 'skirt', 'fender', 'bumper', 'hood', 'steer', 'lights', 'axle', 'motor', 'battery', 'ecu'], count: 12, diag: 'Priority: Full systems scan failed. Powertrain, chassis, and control faults concurrent. ECU not responding.' },
+  { name: 'Systems Full', parts: ['cage', 'seat', 'swheel', 'battery', 'relay', 'harness', 'wheel', 'brake', 'bumper', 'lights', 'pump', 'ecu'], count: 12, diag: 'Warning: Cabin and power systems degraded. Vacuum pump offline. Relay chatter. Steering wheel play excessive.' },
+  { name: 'Power & Chassis', parts: ['fusebox', 'fan', 'battery', 'harness', 'steerrack', 'coilover', 'motor', 'axle', 'hitch', 'lights', 'wheel', 'ecu'], count: 12, diag: 'Critical: HV system fault. Cooling fan seized. Steering rack binding. Drive motor overtemp. Hitch pin missing.' },
+  { name: 'Cargo Deck', parts: ['anchor', 'winch', 'skidplate', 'barrier', 'leafspring', 'tailgate', 'auxbattery', 'triangle', 'hitch', 'lights', 'cage', 'wheel'], count: 12, diag: 'Alert: Cargo deck integrity compromised. Winch motor offline. Tailgate latch failed. Aux battery dead. Warning triangle missing.' },
+  { name: 'Full Fluids & Air', parts: ['reservoir', 'fluidfilter', 'hose', 'mastercyl', 'moisture', 'radiator', 'valves', 'compressor', 'pump', 'snorkel', 'fan', 'ecu'], count: 12, diag: 'Critical: Combined fluid and air faults. Compressor cycling hard. Vacuum pump offline. Radiator restricted. ECU not confirming.' },
+  { name: 'Cabin & Chassis Full', parts: ['steer', 'pedals', 'cluster', 'mirror', 'seat', 'swheel', 'cage', 'strobe', 'coilover', 'brake', 'wheel', 'skirt'], count: 12, diag: 'Priority: Cabin and chassis concurrent faults. Controls unresponsive. Suspension bottoming. Roll cage misaligned. Beacon offline.' }
 ];
 
 const JUNK_EXTRA = ['bolt', 'spring', 'scrap', 'filter', 'wire', 'nut', 'bracket', 'wrench', 'yarn', 'skate', 'comic', 'leaf', 'box', 'cup', 'tape', 'chargeplug', 'extinguisher', 'floorjack', 'lugwrench', 'toolbox', 'cone', 'towhook', 'diagscanner', 'ratchetstrap', 'laser', 'tunacan', 'collar', 'yarnball', 'keycard', 'visor', 'fishpuck', 'nippouch', 'pawpad'];
@@ -458,55 +487,63 @@ function init() {
   $('nextBtn').onclick = nextRound;
   $('againBtn').onclick = () => location.reload();
   $('exitBtn').onclick = exitToLeo;
-  renderViews();
+  renderViewControls();
 }
 
-function startGame() {
-  hideAllScreens();
-  state.rounds = [...PUZZLES].sort(() => Math.random() - 0.5).slice(0, 3);
-  state.current = 0;
-  state.score = 0;
-  state.elapsed = 0;
-  state.startTime = Date.now();
-  $('score').textContent = 0;
-  loadRound();
-  clearInterval(state.timerId);
-  state.timerId = setInterval(() => {
-    state.elapsed = Math.floor((Date.now() - state.startTime) / 1000);
-    $('timer').textContent = formatTime(state.elapsed);
-  }, 1000);
-  setupDrag();
-}
-
-function loadRound() {
-  const p = state.rounds[state.current];
-  state.needed = p.parts.map(id => ALL_PARTS.find(x => x.id === id)).filter(Boolean);
-  state.placed = new Set();
-  state.currentView = state.needed[0]?.view || 'side';
-  $('round').textContent = state.current + 1;
-  $('puzzleName').textContent = p.name;
-  renderRequired();
-  renderCart();
-  renderPile();
-  updateViewButtons();
-}
-
-function renderViews() {
+function renderViewControls() {
   const c = $('viewControls');
+  if (!c) return;
   c.innerHTML = '';
   VIEWS.forEach(v => {
     const b = document.createElement('button');
     b.className = 'view-btn';
     b.textContent = VIEW_LABELS[v];
-    b.onclick = () => { state.currentView = v; renderCart(); updateViewButtons(); };
+    b.onclick = () => { state.currentView = v; renderCart(); document.querySelectorAll('.view-btn').forEach(x => x.classList.toggle('active', x.textContent === VIEW_LABELS[state.currentView])); };
     c.appendChild(b);
   });
 }
 
-function updateViewButtons() {
-  document.querySelectorAll('.view-btn').forEach(b => {
-    b.classList.toggle('active', b.textContent === VIEW_LABELS[state.currentView]);
-  });
+function startGame() {
+  const easy = PUZZLES.filter(p => p.count === 4).sort(() => Math.random() - 0.5)[0];
+  const mid = PUZZLES.filter(p => p.count === 8).sort(() => Math.random() - 0.5)[0];
+  const hard = PUZZLES.filter(p => p.count === 12).sort(() => Math.random() - 0.5)[0];
+  state.rounds = [easy, mid, hard];
+  state.current = 0;
+  state.score = 0;
+  $('score').textContent = '0';
+  hideAllScreens();
+  loadRound();
+  setupDrag();
+}
+
+function loadRound() {
+  const puzzle = state.rounds[state.current];
+  state.needed = puzzle.parts.map(id => ALL_PARTS.find(p => p.id === id));
+  state.placed = new Set();
+  if (state.current === 0) {
+    state.startTime = Date.now();
+    state.elapsed = 0;
+  }
+  state.currentView = 'side';
+  $('round').textContent = state.current + 1;
+  $('puzzleName').textContent = puzzle.name;
+  renderRequired();
+  renderPile();
+  renderCart();
+  renderViewControls();
+  updateTimer();
+  clearInterval(state.timerId);
+  state.timerId = setInterval(tick, 100);
+  showDiagnostic(puzzle.diag);
+}
+
+function showDiagnostic(text) {
+  const log = $('diagLog');
+  $('diagText').textContent = text || 'Systems scan complete. Proceed with repairs.';
+  log.classList.add('show');
+  clearTimeout(state.diagTimer);
+  state.diagTimer = setTimeout(() => log.classList.remove('show'), 6000);
+  log.onclick = () => log.classList.remove('show');
 }
 
 function renderRequired() {
@@ -529,23 +566,19 @@ function renderPile() {
   const h = bench.clientHeight;
   const areaScale = Math.max(1, (w * h) / (1920 * 1080));
   const junkCount = Math.round((28 + state.current * 4) * Math.min(areaScale, 2.2));
-  const other = ALL_PARTS.filter(p => !state.needed.find(n => n.id === p.id))
-    .sort(() => Math.random() - 0.5).slice(0, 8).map(p => ({ id: p.id, correct: false }));
+  const other = ALL_PARTS.filter(p => !state.needed.find(n => n.id === p.id)).sort(() => Math.random() - 0.5).slice(0, 8).map(p => ({ id: p.id, correct: false }));
   const junk = Array.from({ length: junkCount }, (_, i) => ({ id: JUNK_EXTRA[i % JUNK_EXTRA.length], correct: false }));
   const all = [...correct, ...other, ...junk].sort(() => Math.random() - 0.5);
-
   const cx = w * 0.5;
   const cy = h * 0.74;
   const spreadX = Math.min(w * 0.46, 1100);
   const spreadY = Math.min(h * 0.22, 280);
-
   const assemblyR = $('assemblyHUD').getBoundingClientRect();
   const benchR = bench.getBoundingClientRect();
   const assLeft = assemblyR.left - benchR.left - 20;
   const assRight = assemblyR.right - benchR.left + 20;
   const assBottom = assemblyR.bottom - benchR.top + 20;
-
-  all.forEach((it, i) => {
+  all.forEach((it) => {
     const el = document.createElement('div');
     el.className = 'item' + (it.correct ? ' needed' : '');
     el.dataset.id = it.id;
@@ -563,9 +596,7 @@ function renderPile() {
       top = Math.max(h * 0.42, Math.min(h - 112, top));
       attempts++;
     } while (attempts < 12 && (left > assLeft && left < assRight && top < assBottom));
-    if (left > assLeft && left < assRight && top < assBottom) {
-      top = Math.max(assBottom + 10, top);
-    }
+    if (left > assLeft && left < assRight && top < assBottom) top = Math.max(assBottom + 10, top);
     el.style.left = left + 'px';
     el.style.top = top + 'px';
     el.style.zIndex = 10 + Math.floor(Math.random() * 30);
@@ -598,6 +629,148 @@ function renderCart() {
     hs.innerHTML = svgFor(p.id);
     view.appendChild(hs);
   });
+}
+
+function tick() {
+  state.elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+  updateTimer();
+}
+
+function updateTimer() {
+  const m = Math.floor(state.elapsed / 60);
+  const s = String(state.elapsed % 60).padStart(2, '0');
+  $('timer').textContent = `${m}:${s}`;
+}
+
+function setupDrag() {
+  const bench = $('workbench');
+  function onDown(e) {
+    const item = e.target.closest('.item');
+    if (!item) return;
+    e.preventDefault();
+    state.dragging = item;
+    item.classList.add('dragging');
+    item.style.zIndex = 200;
+    const r = item.getBoundingClientRect();
+    const client = e.touches ? e.touches[0] : e;
+    state.offset = { x: client.clientX - r.left, y: client.clientY - r.top };
+    const grabCx = r.left + r.width / 2;
+    const grabCy = r.top + r.height / 2;
+    document.querySelectorAll('.item:not(.dragging)').forEach(other => {
+      const or = other.getBoundingClientRect();
+      const ocx = or.left + or.width / 2;
+      const ocy = or.top + or.height / 2;
+      const dx = ocx - grabCx;
+      const dy = ocy - grabCy;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 130 && dist > 8) {
+        const force = (130 - dist) / 130 * 4.2;
+        if (!other._vel) other._vel = { x: 0, y: 0 };
+        other._vel.x += (dx / dist) * force;
+        other._vel.y += (dy / dist) * force;
+      }
+    });
+  }
+  function onMove(e) {
+    if (!state.dragging) return;
+    e.preventDefault();
+    const client = e.touches ? e.touches[0] : e;
+    const benchR = bench.getBoundingClientRect();
+    let x = client.clientX - benchR.left - state.offset.x;
+    let y = client.clientY - benchR.top - state.offset.y;
+    x = Math.max(0, Math.min(benchR.width - 80, x));
+    y = Math.max(0, Math.min(benchR.height - 80, y));
+    state.dragging.style.left = x + 'px';
+    state.dragging.style.top = y + 'px';
+  }
+  function onUp(e) {
+    if (!state.dragging) return;
+    const client = e.changedTouches ? e.changedTouches[0] : e;
+    const id = state.dragging.dataset.id;
+    const correct = state.dragging.dataset.correct === 'true';
+    const part = ALL_PARTS.find(p => p.id === id);
+    const viewOk = part && part.view === state.currentView;
+    const cartR = $('cartView').getBoundingClientRect();
+    const overCart = client.clientX > cartR.left && client.clientX < cartR.right && client.clientY > cartR.top && client.clientY < cartR.bottom;
+    if (overCart && correct && viewOk && !state.placed.has(id)) {
+      state.placed.add(id);
+      state.score += 150 + Math.max(0, 90 - state.elapsed);
+      $('score').textContent = state.score;
+      state.dragging.remove();
+      renderRequired();
+      renderCart();
+      if (state.placed.size === state.needed.length) {
+        clearInterval(state.timerId);
+        setTimeout(() => {
+          if (state.current + 1 >= 3) {
+            saveScore(state.elapsed);
+            $('victoryMsg').innerHTML = `Time: ${formatTime(state.elapsed)}<br>Score: ${state.score}<br><br>${renderLeaderboard()}`;
+            showScreen('victory');
+          } else {
+            $('roundMsg').textContent = `${state.rounds[state.current].name} repaired.`;
+            showScreen('roundClear');
+          }
+        }, 300);
+      }
+    } else {
+      const benchR = bench.getBoundingClientRect();
+      const x = parseFloat(state.dragging.style.left);
+      const y = parseFloat(state.dragging.style.top);
+      const assemblyR = $('assemblyHUD').getBoundingClientRect();
+      const assLeft = assemblyR.left - benchR.left;
+      const assTop = assemblyR.top - benchR.top;
+      const underHUD = x < assLeft + assemblyR.width && x + 96 > assLeft && y < assTop + assemblyR.height && y + 96 > assTop;
+      if (overCart || underHUD) {
+        state.dragging.style.left = state.dragging.dataset.origLeft;
+        state.dragging.style.top = state.dragging.dataset.origTop;
+        if (overCart) {
+          state.dragging.classList.add('shake');
+          setTimeout(() => state.dragging && state.dragging.classList.remove('shake'), 300);
+        }
+      } else {
+        state.dragging.dataset.origLeft = state.dragging.style.left;
+        state.dragging.dataset.origTop = state.dragging.style.top;
+      }
+    }
+    if (state.dragging) state.dragging.classList.remove('dragging');
+    state.dragging = null;
+  }
+  bench.addEventListener('mousedown', onDown);
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  bench.addEventListener('touchstart', onDown, { passive: false });
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchend', onUp);
+  function driftLoop() {
+    const b = $('workbench');
+    if (!b) return;
+    const benchR = b.getBoundingClientRect();
+    const assembly = $('assemblyHUD');
+    const assR = assembly ? assembly.getBoundingClientRect() : null;
+    const assBottom = assR ? (assR.bottom - benchR.top + 8) : 0;
+    const maxX = benchR.width - 100;
+    const maxY = benchR.height - 100;
+    document.querySelectorAll('.item:not(.dragging)').forEach(item => {
+      if (!item._vel) return;
+      let vx = item._vel.x, vy = item._vel.y;
+      if (Math.abs(vx) < 0.05 && Math.abs(vy) < 0.05) { item._vel = null; return; }
+      let left = parseFloat(item.style.left) || 0;
+      let top = parseFloat(item.style.top) || 0;
+      left += vx; top += vy;
+      vx *= 0.96; vy *= 0.96;
+      left = Math.max(8, Math.min(maxX, left));
+      top = Math.max(assBottom, Math.min(maxY, top));
+      if (left <= 8 || left >= maxX) vx *= -0.5;
+      if (top <= assBottom || top >= maxY) vy *= -0.5;
+      item.style.left = left + 'px';
+      item.style.top = top + 'px';
+      item.dataset.origLeft = item.style.left;
+      item.dataset.origTop = item.style.top;
+      item._vel.x = vx; item._vel.y = vy;
+    });
+    requestAnimationFrame(driftLoop);
+  }
+  requestAnimationFrame(driftLoop);
 }
 
 function formatTime(sec) {
@@ -638,145 +811,6 @@ function exitToLeo() {
   clearInterval(state.timerId);
   if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'mct-repairs-exit' }, '*');
   document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#9CECE3;font-size:22px">Returning to Leo…</div>';
-}
-
-function setupDrag() {
-  const bench = $('workbench');
-  function onDown(e) {
-    const item = e.target.closest('.item');
-    if (!item) return;
-    e.preventDefault();
-    state.dragging = item;
-    item.classList.add('dragging');
-    item.style.zIndex = 200;
-    const r = item.getBoundingClientRect();
-    const client = e.touches ? e.touches[0] : e;
-    state.offset = { x: client.clientX - r.left, y: client.clientY - r.top };
-    const grabCx = r.left + r.width / 2;
-    const grabCy = r.top + r.height / 2;
-    document.querySelectorAll('.item:not(.dragging)').forEach(other => {
-      const or = other.getBoundingClientRect();
-      const ocx = or.left + or.width / 2;
-      const ocy = or.top + or.height / 2;
-      const dx = ocx - grabCx;
-      const dy = ocy - grabCy;
-      const dist = Math.hypot(dx, dy);
-      if (dist < 130 && dist > 8) {
-        const force = (130 - dist) / 130 * 4.2;
-        const nx = dx / dist;
-        const ny = dy / dist;
-        if (!other._vel) other._vel = { x: 0, y: 0 };
-        other._vel.x += nx * force;
-        other._vel.y += ny * force;
-      }
-    });
-  }
-  function onMove(e) {
-    if (!state.dragging) return;
-    e.preventDefault();
-    const client = e.touches ? e.touches[0] : e;
-    const benchR = bench.getBoundingClientRect();
-    let x = client.clientX - benchR.left - state.offset.x;
-    let y = client.clientY - benchR.top - state.offset.y;
-    x = Math.max(0, Math.min(benchR.width - 80, x));
-    y = Math.max(0, Math.min(benchR.height - 80, y));
-    state.dragging.style.left = x + 'px';
-    state.dragging.style.top = y + 'px';
-  }
-  function onUp(e) {
-    if (!state.dragging) return;
-    const client = e.changedTouches ? e.changedTouches[0] : e;
-    const id = state.dragging.dataset.id;
-    const correct = state.dragging.dataset.correct === 'true';
-    const part = ALL_PARTS.find(p => p.id === id);
-    const viewOk = part && part.view === state.currentView;
-    const cartR = $('cartView').getBoundingClientRect();
-    const overCart = client.clientX > cartR.left && client.clientX < cartR.right &&
-                     client.clientY > cartR.top && client.clientY < cartR.bottom;
-    if (overCart && correct && viewOk && !state.placed.has(id)) {
-      state.placed.add(id);
-      state.score += 150 + Math.max(0, 90 - state.elapsed);
-      $('score').textContent = state.score;
-      state.dragging.remove();
-      renderRequired();
-      renderCart();
-      if (state.placed.size === state.needed.length) {
-        clearInterval(state.timerId);
-        setTimeout(() => {
-          if (state.current + 1 >= 3) {
-            const total = state.elapsed;
-            saveScore(total);
-            $('victoryMsg').innerHTML = `Time: ${formatTime(total)}<br>Score: ${state.score}<br><br>${renderLeaderboard()}`;
-            showScreen('victory');
-          } else {
-            $('roundMsg').textContent = `${state.rounds[state.current].name} repaired.`;
-            showScreen('roundClear');
-          }
-        }, 300);
-      }
-    } else {
-      const benchR = bench.getBoundingClientRect();
-      const x = parseFloat(state.dragging.style.left);
-      const y = parseFloat(state.dragging.style.top);
-      const itemW = 96, itemH = 96;
-      const assemblyR = $('assemblyHUD').getBoundingClientRect();
-      const assLeft = assemblyR.left - benchR.left;
-      const assTop = assemblyR.top - benchR.top;
-      const assRight = assLeft + assemblyR.width;
-      const assBottom = assTop + assemblyR.height;
-      const underHUD = x < assRight && x + itemW > assLeft && y < assBottom && y + itemH > assTop;
-      if (overCart || underHUD) {
-        state.dragging.style.left = state.dragging.dataset.origLeft;
-        state.dragging.style.top = state.dragging.dataset.origTop;
-        if (overCart) {
-          state.dragging.classList.add('shake');
-          setTimeout(() => state.dragging && state.dragging.classList.remove('shake'), 300);
-        }
-      } else {
-        state.dragging.dataset.origLeft = state.dragging.style.left;
-        state.dragging.dataset.origTop = state.dragging.style.top;
-      }
-    }
-    if (state.dragging) state.dragging.classList.remove('dragging');
-    state.dragging = null;
-  }
-  bench.addEventListener('mousedown', onDown);
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
-  bench.addEventListener('touchstart', onDown, { passive: false });
-  document.addEventListener('touchmove', onMove, { passive: false });
-  document.addEventListener('touchend', onUp);
-  function driftLoop() {
-    const bench = $('workbench');
-    if (!bench) return;
-    const benchR = bench.getBoundingClientRect();
-    const assembly = $('assemblyHUD');
-    const assR = assembly ? assembly.getBoundingClientRect() : null;
-    const assBottom = assR ? (assR.bottom - benchR.top + 8) : 0;
-    const maxX = benchR.width - 100;
-    const maxY = benchR.height - 100;
-    document.querySelectorAll('.item:not(.dragging)').forEach(item => {
-      if (!item._vel) return;
-      let vx = item._vel.x;
-      let vy = item._vel.y;
-      if (Math.abs(vx) < 0.05 && Math.abs(vy) < 0.05) { item._vel = null; return; }
-      let left = parseFloat(item.style.left) || 0;
-      let top = parseFloat(item.style.top) || 0;
-      left += vx; top += vy;
-      vx *= 0.96; vy *= 0.96;
-      left = Math.max(8, Math.min(maxX, left));
-      top = Math.max(assBottom, Math.min(maxY, top));
-      if (left <= 8 || left >= maxX) vx *= -0.5;
-      if (top <= assBottom || top >= maxY) vy *= -0.5;
-      item.style.left = left + 'px';
-      item.style.top = top + 'px';
-      item.dataset.origLeft = item.style.left;
-      item.dataset.origTop = item.style.top;
-      item._vel.x = vx; item._vel.y = vy;
-    });
-    requestAnimationFrame(driftLoop);
-  }
-  requestAnimationFrame(driftLoop);
 }
 init();
 </script>
