@@ -1,1 +1,794 @@
-PLACEHOLDER
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCT Repairs · LEO Service Bay</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --accent: #ff7a2e;
+    --teal: #9CECE3;
+    --text: #eef2f7;
+    --muted: #8b97a8;
+    --good: #3ee08a;
+    --bad: #ff5c6c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0d12;
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+  #app { height: 100vh; display: flex; flex-direction: column; }
+  header {
+    height: 56px; display: flex; justify-content: space-between; align-items: center;
+    padding: 0 18px; background: #0d1219; border-bottom: 1px solid #222;
+    font-size: 14px; z-index: 60; position: relative;
+  }
+  header h1 { font-size: 16px; color: var(--accent); letter-spacing: 0.5px; }
+  .hud { display: flex; gap: 16px; align-items: center; }
+  .hud span { color: var(--teal); font-weight: 600; }
+  .timer { color: var(--accent); font-variant-numeric: tabular-nums; }
+  #workbench {
+    flex: 1; position: relative; width: 100vw; height: calc(100vh - 56px);
+    background:
+      radial-gradient(circle at 30% 40%, rgba(30,40,55,0.4) 0%, transparent 50%),
+      linear-gradient(180deg, #12161e 0%, #0c1016 100%);
+    overflow: hidden;
+  }
+  #workbench::before {
+    content: ''; position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  .item {
+    position: absolute; width: 96px; height: 96px; cursor: grab; touch-action: none;
+    display: flex; align-items: center; justify-content: center;
+    filter: drop-shadow(0 6px 8px rgba(0,0,0,0.45));
+    transition: transform 0.2s ease, filter 0.1s;
+    z-index: 10;
+    animation: float 6.5s ease-in-out infinite;
+  }
+  .item:nth-child(odd) { animation-duration: 8s; animation-delay: -1.5s; }
+  .item:nth-child(3n) { animation-duration: 5.8s; animation-delay: -2.5s; }
+  @keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-10px) rotate(1.2deg); }
+  }
+  .item.needed {
+    filter: drop-shadow(0 6px 8px rgba(0,0,0,0.45)) drop-shadow(0 0 6px rgba(156,236,227,0.35));
+  }
+  .item:hover { transform: scale(1.04); }
+  .item:active, .item.dragging {
+    cursor: grabbing; z-index: 200 !important;
+    transform: scale(1.1);
+    filter: drop-shadow(0 12px 18px rgba(0,0,0,0.6));
+    animation: none;
+  }
+  .item svg { width: 100%; height: 100%; }
+  .overlay {
+    position: absolute; z-index: 50;
+    background: rgba(22, 27, 34, 0.82);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  #assemblyHUD {
+    top: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 16px; align-items: flex-start;
+    width: 920px; min-height: 460px;
+    background: rgba(10, 18, 28, 0.72);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(156, 236, 227, 0.45);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 0 24px rgba(156, 236, 227, 0.18), inset 0 0 40px rgba(156, 236, 227, 0.04);
+    position: relative;
+    overflow: hidden;
+  }
+  #assemblyHUD::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 3px,
+      rgba(156, 236, 227, 0.03) 3px,
+      rgba(156, 236, 227, 0.03) 4px
+    );
+    pointer-events: none;
+  }
+  #requiredHUD {
+    width: 210px; height: 430px; overflow-y: auto;
+    pointer-events: none;
+    background: none; border: none; box-shadow: none; padding: 0;
+    scrollbar-width: none;
+    position: relative; z-index: 1;
+  }
+  #requiredHUD::-webkit-scrollbar { display: none; }
+  #requiredHUD h2, #cartHUD h2 { 
+    font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; 
+    color: #9CECE3; margin-bottom: 8px; text-shadow: 0 0 8px rgba(156,236,227,0.4);
+  }
+  .req-item {
+    display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.18); border-radius: 4px;
+    padding: 1px 4px; margin-bottom: 1px; font-size: 10px; border: 1px solid rgba(255,255,255,0.04);
+  }
+  .req-item.done { opacity: 0.45; }
+  .req-item.done .status { background: var(--good); color: #111; }
+  .req-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+  .status { margin-left: auto; font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #333; }
+  #cartHUD {
+    width: 680px;
+    background: none; border: none; box-shadow: none; padding: 0;
+    position: relative; z-index: 1;
+  }
+  .cart-view {
+    width: 100%; height: 300px; position: relative;
+    background: rgba(0, 12, 20, 0.4);
+    border: 1px solid rgba(156, 236, 227, 0.2);
+    border-radius: 8px; overflow: hidden;
+  }
+  .cart-view::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(156, 236, 227, 0.04) 100%);
+    pointer-events: none;
+  }
+  .cart-view > svg { width: 100%; height: 100%; }
+  .hotspot {
+    position: absolute; border: 2px solid rgba(156,236,227,0.6); border-radius: 6px;
+    background: rgba(156,236,227,0.12); pointer-events: none;
+    animation: pulseBorder 1.8s ease-in-out infinite;
+    display: flex; align-items: center; justify-content: center;
+    transform: translate(-50%, -50%);
+  }
+  .hotspot svg {
+    width: 48px; height: 48px;
+    opacity: 0.85;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+  }
+  .hotspot.filled svg { opacity: 1; }
+  .hotspot.filled { 
+    border-color: var(--good); 
+    background: rgba(62,224,138,0.25); 
+    animation: none; 
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(62,224,138,0.4);
+  }
+  @keyframes pulseBorder { 50% { border-color: #9CECE3; box-shadow: 0 0 10px rgba(156,236,227,0.5); } }
+  .screen {
+    position: fixed; inset: 0; background: rgba(8,10,14,0.94); display: none;
+    align-items: center; justify-content: center; flex-direction: column; gap: 14px; z-index: 200;
+    text-align: center; padding: 20px;
+  }
+  .screen.show { display: flex; }
+  .screen h2 { font-size: 34px; color: var(--accent); }
+  .screen p { color: var(--muted); max-width: 440px; line-height: 1.5; }
+  button {
+    background: var(--accent); color: #111; border: none; padding: 11px 26px; border-radius: 8px;
+    font-weight: 700; font-size: 15px; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button.secondary { background: #2a3140; color: var(--text); }
+  .shake { animation: shake 0.35s; }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>MCT REPAIRS</h1>
+    <div class="hud">
+      <div>Round <span id="round">1</span>/3</div>
+      <div id="puzzleName">—</div>
+      <div>Score <span id="score">0</span></div>
+      <div>Time <span class="timer" id="timer">0:00</span></div>
+    </div>
+    <button class="secondary" id="exitBtn">Back to Leo</button>
+  </header>
+  <div id="workbench">
+    <div class="overlay" id="assemblyHUD">
+      <div id="requiredHUD">
+        <h2>Required Parts</h2>
+        <div id="required"></div>
+      </div>
+      <div id="cartHUD">
+        <h2>MCT-01 Assembly</h2>
+        <div class="view-controls" id="viewControls"></div>
+        <div class="cart-view" id="cartView"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="screen show" id="startScreen">
+  <h2>MCT REPAIRS</h2>
+  <p>Full-screen service bay time trial. Dig through the workbench, cycle the MCT views, and install the required parts as fast as you can.</p>
+  <button id="startBtn">Start Game</button>
+</div>
+<div class="screen" id="roundClear"><h2>Round Clear</h2><p id="roundMsg">Systems restored.</p><button id="nextBtn">Next Round</button></div>
+<div class="screen" id="victory"><h2>All Repairs Complete</h2><p id="victoryMsg">MCT fleet is operational.</p><button id="againBtn">Play Again</button></div>
+
+<script>
+const ALL_PARTS = [
+  { id: 'wheel', name: 'Wheel & Hub', view: 'side' },
+  { id: 'cage', name: 'Safety Roll Cage', view: 'top' },
+  { id: 'steer', name: 'Steering & Dash', view: 'front' },
+  { id: 'seat', name: 'Modular Seat', view: 'top' },
+  { id: 'bumper', name: 'Front Bumper', view: 'front' },
+  { id: 'lights', name: 'Rear Step & Lights', view: 'rear' },
+  { id: 'skirt', name: 'MCT-01 Side Skirt', view: 'side' },
+  { id: 'hood', name: 'Hood Deflector', view: 'front' },
+  { id: 'fender', name: 'Fender & Guard', view: 'side' },
+  { id: 'battery', name: '48V Battery Pack', view: 'top' },
+  { id: 'harness', name: 'Wiring Harness', view: 'rear' },
+  { id: 'relay', name: 'Solenoid Relay', view: 'top' },
+  { id: 'pump', name: 'Vacuum Pump', view: 'side' },
+  { id: 'motor', name: 'Electric Drive Motor', view: 'rear' },
+  { id: 'axle', name: 'Rear Axle Assembly', view: 'rear' },
+  { id: 'swheel', name: 'Steering Wheel', view: 'top' },
+  { id: 'brake', name: 'Brake Rotor & Caliper', view: 'side' },
+  { id: 'ecu', name: 'ECU Controller', view: 'front' },
+  { id: 'coilover', name: 'Coilover Shock', view: 'side' },
+  { id: 'steerrack', name: 'Steering Rack', view: 'front' },
+  { id: 'fusebox', name: 'HV Fuse & Relay Box', view: 'rear' },
+  { id: 'fan', name: 'Cooling Fan Shroud', view: 'front' },
+  { id: 'pedals', name: 'Pedal Assembly', view: 'front' },
+  { id: 'strobe', name: 'Roof Strobe Beacon', view: 'top' },
+  { id: 'mirror', name: 'Side-View Mirror', view: 'side' },
+  { id: 'cluster', name: 'Instrument Cluster', view: 'front' },
+  { id: 'hitch', name: 'Rear Pintle Hitch', view: 'rear' },
+  { id: 'reservoir', name: 'Fluid Reservoir', view: 'side' },
+  { id: 'compressor', name: 'Air Compressor', view: 'rear' },
+  { id: 'fluidfilter', name: 'Heavy Fluid Filter', view: 'side' },
+  { id: 'radiator', name: 'Radiator Core', view: 'front' },
+  { id: 'valves', name: 'Pneumatic Valves', view: 'rear' },
+  { id: 'hose', name: 'Reinforced Hose', view: 'side' },
+  { id: 'mastercyl', name: 'Master Cylinder', view: 'front' },
+  { id: 'moisture', name: 'Moisture Trap Filter', view: 'rear' },
+  { id: 'latch', name: 'Spring Latch Mechanism', view: 'rear' },
+  { id: 'anchor', name: 'Bed Anchor Ring', view: 'top' },
+  { id: 'snorkel', name: 'Air Intake Snorkel', view: 'side' },
+  { id: 'winch', name: 'Electric Winch', view: 'front' },
+  { id: 'skidplate', name: 'Skid Plate Guard', view: 'front' },
+  { id: 'triangle', name: 'Warning Triangle', view: 'rear' },
+  { id: 'barrier', name: 'Cargo Barrier Wall', view: 'rear' },
+  { id: 'leafspring', name: 'Leaf Spring Assembly', view: 'side' },
+  { id: 'tailgate', name: 'Tailgate Hinge Latch', view: 'rear' },
+  { id: 'auxbattery', name: 'Auxiliary 12V Battery', view: 'rear' }
+];
+
+const PUZZLES = [
+  { name: 'Basic Drive', parts: ['wheel', 'bumper', 'lights', 'cage'], count: 4 },
+  { name: 'Front Fit', parts: ['bumper', 'hood', 'steer', 'skirt'], count: 4 },
+  { name: 'Rear Check', parts: ['lights', 'axle', 'motor', 'fender'], count: 4 },
+  { name: 'Chassis & Power', parts: ['wheel', 'skirt', 'battery', 'harness', 'bumper', 'lights', 'seat', 'brake'], count: 8 },
+  { name: 'Full Exterior', parts: ['bumper', 'hood', 'fender', 'skirt', 'lights', 'cage', 'steer', 'wheel'], count: 8 },
+  { name: 'Complete Overhaul', parts: ['wheel', 'brake', 'skirt', 'fender', 'bumper', 'hood', 'steer', 'lights', 'axle', 'motor', 'battery', 'ecu'], count: 12 },
+  { name: 'Systems Full', parts: ['cage', 'seat', 'swheel', 'battery', 'relay', 'harness', 'wheel', 'brake', 'bumper', 'lights', 'pump', 'ecu'], count: 12 },
+  { name: 'Suspension Check', parts: ['coilover', 'wheel', 'brake', 'skirt'], count: 4 },
+  { name: 'Cabin Fit', parts: ['steer', 'pedals', 'cluster', 'mirror', 'seat', 'swheel', 'cage', 'strobe'], count: 8 },
+  { name: 'Power & Chassis', parts: ['fusebox', 'fan', 'battery', 'harness', 'steerrack', 'coilover', 'motor', 'axle', 'hitch', 'lights', 'wheel', 'ecu'], count: 12 },
+  { name: 'Fluids Service', parts: ['reservoir', 'fluidfilter', 'hose', 'mastercyl', 'moisture', 'radiator', 'valves', 'compressor'], count: 8 },
+  { name: 'Cargo Deck', parts: ['anchor', 'winch', 'skidplate', 'barrier', 'leafspring', 'tailgate', 'auxbattery', 'triangle', 'hitch', 'lights', 'cage', 'wheel'], count: 12 }
+];
+
+const JUNK_EXTRA = ['bolt', 'spring', 'scrap', 'filter', 'wire', 'nut', 'bracket', 'wrench', 'yarn', 'skate', 'comic', 'leaf', 'box', 'cup', 'tape', 'chargeplug', 'extinguisher', 'floorjack', 'lugwrench', 'toolbox', 'cone', 'towhook', 'diagscanner', 'ratchetstrap', 'laser', 'tunacan', 'collar', 'yarnball', 'keycard', 'visor', 'fishpuck', 'nippouch', 'pawpad'];
+
+const VIEWS = ['front', 'side', 'rear', 'top'];
+const VIEW_LABELS = { front: 'Front', side: 'Side', rear: 'Rear', top: 'Top' };
+
+let state = {
+  rounds: [], current: 0, score: 0, startTime: 0, elapsed: 0, timerId: null,
+  needed: [], placed: new Set(), dragging: null, offset: {x:0,y:0},
+  currentView: 'side'
+};
+
+const $ = id => document.getElementById(id);
+
+function svgFor(id) {
+  const s = {
+    wheel: `<circle cx="32" cy="32" r="28" fill="#1a1a1a"/><circle cx="32" cy="32" r="16" fill="#2a6a6a"/><circle cx="32" cy="32" r="6" fill="#444"/><path d="M32 8 L32 18 M32 46 L32 56 M8 32 L18 32 M46 32 L56 32" fill="none" stroke="#333" stroke-width="2"/>`,
+    cage: `<path d="M12 16 H52 V26 H44 L36 50 H28 L20 26 H12 Z" fill="none" stroke="#ff7a2e" stroke-width="5" stroke-linejoin="round"/><rect x="20" y="20" width="24" height="6" fill="#ff7a2e" opacity="0.5"/>`,
+    steer: `<ellipse cx="32" cy="18" rx="16" ry="8" fill="none" stroke="#555" stroke-width="3"/><rect x="28" y="22" width="8" height="14" fill="#666"/><rect x="10" y="34" width="44" height="6" rx="2" fill="#9CECE3"/><circle cx="32" cy="18" r="3" fill="#9CECE3"/>`,
+    seat: `<path d="M14 14 H38 V42 H52 V52 H14 Z" fill="#7a8598"/><rect x="18" y="20" width="16" height="18" fill="#5a6578"/><rect x="40" y="42" width="10" height="6" fill="#4a5568"/>`,
+    bumper: `<rect x="4" y="24" width="56" height="14" rx="2" fill="#555"/><rect x="10" y="28" width="12" height="6" fill="#ddd"/><rect x="42" y="28" width="12" height="6" fill="#ddd"/><rect x="6" y="36" width="52" height="3" fill="#333"/>`,
+    lights: `<rect x="4" y="24" width="56" height="12" rx="2" fill="#444"/><rect x="8" y="27" width="12" height="6" fill="#ff5c6c"/><rect x="44" y="27" width="12" height="6" fill="#ff5c6c"/><rect x="26" y="28" width="12" height="4" fill="#9CECE3"/>`,
+    skirt: `<rect x="6" y="22" width="52" height="20" rx="2" fill="#6a7588"/><rect x="10" y="26" width="16" height="6" fill="#fff"/><rect x="10" y="34" width="28" height="4" fill="#ff7a2e"/><text x="18" y="31" fill="#222" font-size="5" text-anchor="middle">01</text>`,
+    hood: `<path d="M8 42 L32 12 L56 42 Z" fill="#7a8598"/><rect x="20" y="28" width="24" height="4" fill="#9CECE3" opacity="0.7"/><path d="M16 36 H48" fill="none" stroke="#5a6578" stroke-width="1"/>`,
+    fender: `<path d="M6 30 H58 V38 H50 A18 18 0 0 1 14 38 H6 Z" fill="#6a7588"/><rect x="18" y="32" width="28" height="3" fill="#ff7a2e"/>`,
+    battery: `<rect x="12" y="10" width="40" height="44" rx="2" fill="#333"/><rect x="12" y="22" width="40" height="12" fill="#ff7a2e"/><rect x="16" y="14" width="32" height="4" fill="#555"/><rect x="28" y="6" width="8" height="6" fill="#666"/>`,
+    harness: `<path d="M10 46 Q32 10 54 34" fill="none" stroke="#ff7a2e" stroke-width="4"/><path d="M14 44 Q32 14 50 32" fill="none" stroke="#9CECE3" stroke-width="2.5"/><circle cx="10" cy="46" r="3" fill="#888"/><circle cx="54" cy="34" r="3" fill="#888"/>`,
+    relay: `<rect x="16" y="8" width="32" height="48" rx="2" fill="#444"/><rect x="20" y="18" width="10" height="24" fill="#ff7a2e"/><circle cx="40" cy="20" r="4" fill="#9CECE3"/><rect x="36" y="30" width="8" height="12" fill="#555"/>`,
+    pump: `<rect x="14" y="16" width="36" height="32" rx="3" fill="#555"/><rect x="20" y="10" width="24" height="8" fill="#666"/><circle cx="32" cy="32" r="8" fill="#9CECE3"/><circle cx="32" cy="32" r="3" fill="#333"/>`,
+    motor: `<rect x="12" y="18" width="40" height="28" rx="3" fill="#333"/><circle cx="32" cy="32" r="10" fill="#ff7a2e"/><rect x="26" y="8" width="12" height="12" fill="#555"/><path d="M28 32 H36" fill="none" stroke="#333" stroke-width="2"/>`,
+    axle: `<rect x="6" y="26" width="52" height="10" fill="#555"/><circle cx="14" cy="31" r="7" fill="#333"/><circle cx="50" cy="31" r="7" fill="#333"/><rect x="28" y="28" width="8" height="6" fill="#666"/>`,
+    swheel: `<circle cx="32" cy="32" r="18" fill="none" stroke="#555" stroke-width="4"/><circle cx="32" cy="32" r="5" fill="#9CECE3"/><rect x="30" y="14" width="4" height="8" fill="#666"/><rect x="30" y="42" width="4" height="8" fill="#666"/>`,
+    brake: `<circle cx="32" cy="32" r="20" fill="#444"/><circle cx="32" cy="32" r="10" fill="#666"/><rect x="26" y="6" width="12" height="12" fill="#888"/><circle cx="32" cy="32" r="4" fill="#222"/>`,
+    ecu: `<rect x="14" y="12" width="36" height="40" rx="2" fill="#222"/><rect x="18" y="18" width="18" height="10" fill="#9CECE3"/><circle cx="44" cy="22" r="3" fill="#ff7a2e"/><rect x="18" y="34" width="28" height="3" fill="#555"/><rect x="18" y="40" width="20" height="3" fill="#555"/>`,
+    coilover: `<rect x="26" y="6" width="12" height="52" fill="#aaa"/><path d="M18 14 H46 M16 22 H48 M18 30 H46 M16 38 H48 M18 46 H46" fill="none" stroke="#ff7a2e" stroke-width="3"/><circle cx="32" cy="8" r="5" fill="#666"/><circle cx="32" cy="56" r="5" fill="#666"/>`,
+    steerrack: `<rect x="8" y="26" width="48" height="10" fill="#666"/><rect x="26" y="14" width="12" height="20" fill="#555"/><circle cx="12" cy="31" r="5" fill="#999"/><circle cx="52" cy="31" r="5" fill="#999"/>`,
+    fusebox: `<rect x="10" y="10" width="44" height="44" rx="2" fill="#333"/><rect x="14" y="14" width="12" height="12" fill="#ff7a2e"/><rect x="28" y="14" width="12" height="12" fill="#e44"/><rect x="42" y="14" width="8" height="12" fill="#9CECE3"/><rect x="14" y="30" width="16" height="14" fill="#555"/><rect x="34" y="30" width="16" height="14" fill="#2a6a6a"/>`,
+    fan: `<circle cx="32" cy="32" r="22" fill="#222"/><path d="M32 10 L40 32 L32 54 L24 32 Z" fill="#888"/><path d="M10 32 L32 24 L54 32 L32 40 Z" fill="#999"/><circle cx="32" cy="32" r="6" fill="#9CECE3"/>`,
+    pedals: `<rect x="14" y="12" width="36" height="6" fill="#666"/><rect x="18" y="18" width="8" height="20" fill="#888"/><rect x="36" y="18" width="8" height="20" fill="#ff7a2e"/><rect x="16" y="36" width="14" height="12" fill="#555"/><rect x="34" y="36" width="14" height="12" fill="#ff7a2e"/>`,
+    strobe: `<rect x="6" y="20" width="52" height="16" rx="2" fill="#ff7a2e"/><rect x="10" y="24" width="12" height="8" fill="#ffeb3b"/><rect x="26" y="24" width="12" height="8" fill="#ffeb3b"/><rect x="42" y="24" width="12" height="8" fill="#ffeb3b"/>`,
+    mirror: `<rect x="16" y="10" width="26" height="20" rx="2" fill="#9CECE3"/><path d="M28 30 L16 52" fill="none" stroke="#666" stroke-width="4"/>`,
+    cluster: `<rect x="8" y="12" width="48" height="40" rx="3" fill="#222"/><text x="26" y="36" fill="#9CECE3" font-size="14" text-anchor="middle" font-weight="bold">24</text><rect x="38" y="18" width="14" height="5" fill="#ff7a2e"/><rect x="38" y="26" width="14" height="5" fill="#e44"/>`,
+    hitch: `<rect x="10" y="18" width="44" height="10" fill="#666"/><circle cx="32" cy="42" r="12" fill="none" stroke="#999" stroke-width="4"/><rect x="26" y="26" width="12" height="10" fill="#ff7a2e"/>`,
+    reservoir: `<rect x="12" y="10" width="40" height="40" rx="3" fill="#666"/><rect x="16" y="22" width="32" height="16" fill="#f5a623"/><rect x="22" y="6" width="20" height="6" fill="#333"/>`,
+    compressor: `<ellipse cx="32" cy="38" rx="20" ry="14" fill="#555"/><circle cx="32" cy="16" r="8" fill="none" stroke="#9CECE3" stroke-width="2"/><line x1="34" y1="16" x2="40" y2="10" stroke="#e44" stroke-width="2"/>`,
+    fluidfilter: `<rect x="16" y="8" width="32" height="44" rx="2" fill="#e44"/><rect x="18" y="12" width="28" height="6" fill="#333"/><rect x="22" y="46" width="20" height="6" fill="#666"/>`,
+    radiator: `<rect x="10" y="12" width="44" height="40" rx="2" fill="#7a8598"/><path d="M14 18 H50 M14 26 H50 M14 34 H50 M14 42 H50" fill="none" stroke="#444" stroke-width="1.5"/>`,
+    valves: `<rect x="10" y="26" width="44" height="18" rx="2" fill="#666"/><rect x="14" y="16" width="8" height="12" fill="#333"/><rect x="28" y="16" width="8" height="12" fill="#333"/><rect x="42" y="16" width="8" height="12" fill="#333"/><circle cx="18" cy="35" r="3" fill="#9CECE3"/><circle cx="32" cy="35" r="3" fill="#9CECE3"/><circle cx="46" cy="35" r="3" fill="#9CECE3"/>`,
+    hose: `<path d="M8 32 Q32 8 56 32" fill="none" stroke="#555" stroke-width="8"/><rect x="6" y="28" width="10" height="10" fill="#aaa"/><rect x="48" y="28" width="10" height="10" fill="#aaa"/>`,
+    mastercyl: `<rect x="8" y="26" width="44" height="16" rx="2" fill="#555"/><rect x="12" y="14" width="12" height="14" fill="#ddd"/><rect x="28" y="14" width="12" height="14" fill="#ddd"/>`,
+    moisture: `<path d="M16 16 H48 V24 L38 50 H26 L16 24 Z" fill="#9CECE3"/><rect x="18" y="12" width="28" height="6" fill="#ff7a2e"/>`,
+    latch: `<rect x="10" y="14" width="20" height="36" fill="#666"/><rect x="28" y="24" width="22" height="8" fill="#888"/><circle cx="50" cy="28" r="7" fill="none" stroke="#ff7a2e" stroke-width="3"/>`,
+    anchor: `<rect x="12" y="16" width="40" height="32" rx="2" fill="#555"/><path d="M18 30 Q32 14 46 30" fill="none" stroke="#bbb" stroke-width="4"/>`,
+    snorkel: `<rect x="22" y="10" width="20" height="36" fill="#555"/><rect x="16" y="6" width="32" height="12" fill="#666"/>`,
+    winch: `<rect x="6" y="20" width="52" height="20" rx="2" fill="#444"/><rect x="10" y="24" width="8" height="12" fill="#888"/><rect x="22" y="24" width="8" height="12" fill="#888"/><rect x="34" y="24" width="8" height="12" fill="#888"/><rect x="48" y="22" width="8" height="16" fill="#ff7a2e"/>`,
+    skidplate: `<path d="M6 18 H58 L52 46 H12 Z" fill="#6a7588"/><rect x="14" y="26" width="36" height="3" fill="#333"/><rect x="14" y="34" width="36" height="3" fill="#333"/>`,
+    triangle: `<path d="M32 6 L58 54 H6 Z" fill="#e44"/><path d="M32 16 L50 50 H14 Z" fill="#222"/>`,
+    barrier: `<rect x="8" y="10" width="48" height="44" fill="#555"/><path d="M12 16 H52 M12 26 H52 M12 36 H52 M12 46 H52" fill="none" stroke="#888" stroke-width="1.5"/>`,
+    leafspring: `<path d="M4 40 Q32 14 60 40" fill="none" stroke="#999" stroke-width="5"/><rect x="24" y="24" width="16" height="20" fill="#666"/>`,
+    tailgate: `<rect x="14" y="10" width="20" height="40" fill="#555"/><rect x="34" y="22" width="16" height="14" rx="1" fill="#777"/><circle cx="42" cy="29" r="3" fill="#333"/>`,
+    auxbattery: `<rect x="10" y="14" width="44" height="36" rx="2" fill="#444"/><rect x="14" y="28" width="28" height="14" fill="#f5a623"/><text x="28" y="38" fill="#222" font-size="7" text-anchor="middle" font-weight="bold">12V</text><rect x="40" y="10" width="6" height="6" fill="#e44"/>`,
+    bolt: `<rect x="26" y="16" width="12" height="32" fill="#888"/><polygon points="22,16 42,16 32,6" fill="#aaa"/><rect x="24" y="42" width="16" height="6" fill="#666"/>`,
+    spring: `<path d="M20 8 Q44 16 20 24 Q44 32 20 40 Q44 48 20 56" fill="none" stroke="#999" stroke-width="3.5"/><circle cx="20" cy="8" r="3" fill="#777"/><circle cx="20" cy="56" r="3" fill="#777"/>`,
+    scrap: `<polygon points="12,44 28,12 44,28 52,40 36,48" fill="#555"/><polygon points="20,36 32,20 40,32" fill="#666"/>`,
+    filter: `<rect x="16" y="10" width="32" height="44" rx="3" fill="#444"/><rect x="20" y="16" width="24" height="6" fill="#9CECE3"/><rect x="20" y="26" width="24" height="4" fill="#666"/><rect x="20" y="34" width="24" height="4" fill="#666"/>`,
+    wire: `<path d="M10 18 Q20 32 32 28 Q44 24 54 40" fill="none" stroke="#666" stroke-width="3"/><circle cx="10" cy="18" r="3" fill="#888"/><circle cx="54" cy="40" r="3" fill="#888"/>`,
+    nut: `<polygon points="32,6 54,18 54,46 32,58 10,46 10,18" fill="#666"/><circle cx="32" cy="32" r="8" fill="#333"/>`,
+    bracket: `<path d="M12 12 H48 V20 H20 V52 H12 Z" fill="#777"/>`,
+    wrench: `<path d="M14 50 L26 20 L34 28 L50 12 L54 18 L36 36 L28 28 L16 54 Z" fill="#888"/>`,
+    yarn: `<circle cx="32" cy="32" r="18" fill="#c44"/><path d="M18 26 Q32 14 46 26 Q32 38 18 26" fill="none" stroke="#fff" stroke-width="2"/><path d="M22 34 Q32 46 42 34" fill="none" stroke="#faa" stroke-width="1.5"/>`,
+    skate: `<rect x="6" y="24" width="52" height="8" rx="2" fill="#555"/><circle cx="14" cy="42" r="5" fill="#222"/><circle cx="50" cy="42" r="5" fill="#222"/><rect x="12" y="18" width="8" height="8" fill="#666"/>`,
+    comic: `<rect x="10" y="8" width="44" height="48" rx="2" fill="#3a5a8a"/><rect x="14" y="14" width="20" height="12" fill="#ffeb3b"/><text x="32" y="42" font-size="9" fill="#fff" text-anchor="middle" font-weight="bold">POW</text>`,
+    leaf: `<path d="M32 8 Q56 28 32 56 Q8 28 32 8" fill="#2a7a3a"/><path d="M32 14 L32 50" fill="none" stroke="#1a5a2a" stroke-width="1.5"/>`,
+    box: `<rect x="10" y="18" width="44" height="30" fill="#8a6540"/><path d="M10 18 L32 6 L54 18" fill="none" stroke="#6a4a30" stroke-width="2"/><rect x="22" y="26" width="20" height="10" fill="#6a4a30"/>`,
+    cup: `<path d="M14 14 H50 V46 Q32 56 14 46 Z" fill="#666"/><rect x="46" y="20" width="8" height="12" fill="#555"/>`,
+    tape: `<circle cx="32" cy="32" r="20" fill="none" stroke="#ccc" stroke-width="7"/><circle cx="32" cy="32" r="7" fill="#333"/><path d="M32 12 L32 20" fill="none" stroke="#eee" stroke-width="2"/>`,
+    chargeplug: `<path d="M10 22 Q32 6 54 22" fill="none" stroke="#9CECE3" stroke-width="4"/><rect x="18" y="26" width="28" height="18" rx="2" fill="#333"/><circle cx="32" cy="35" r="4" fill="#9CECE3"/><rect x="42" y="30" width="6" height="4" fill="#888"/>`,
+    extinguisher: `<rect x="18" y="12" width="28" height="38" rx="3" fill="#e44"/><rect x="20" y="8" width="24" height="6" fill="#666"/><rect x="22" y="20" width="20" height="8" fill="#fff"/><path d="M42 16 Q50 20 46 28" fill="none" stroke="#555" stroke-width="2"/>`,
+    floorjack: `<rect x="10" y="28" width="40" height="12" fill="#555"/><rect x="40" y="16" width="8" height="20" fill="#ff7a2e"/><circle cx="16" cy="46" r="6" fill="#333"/><rect x="14" y="22" width="16" height="6" fill="#777"/>`,
+    lugwrench: `<rect x="26" y="6" width="12" height="52" fill="#777"/><rect x="6" y="26" width="52" height="12" fill="#777"/><circle cx="32" cy="32" r="6" fill="#555"/>`,
+    toolbox: `<rect x="10" y="18" width="44" height="30" rx="2" fill="#555"/><rect x="16" y="12" width="32" height="8" fill="#444"/><rect x="18" y="28" width="28" height="8" fill="#fff"/><rect x="20" y="30" width="8" height="4" fill="#ff7a2e"/><rect x="36" y="30" width="8" height="4" fill="#ff7a2e"/>`,
+    cone: `<path d="M32 8 L54 52 H10 Z" fill="#ff7a2e"/><rect x="24" y="6" width="16" height="5" fill="#fff"/><path d="M22 36 H42" fill="none" stroke="#fff" stroke-width="2"/>`,
+    towhook: `<path d="M14 16 Q32 4 50 16 Q42 36 32 46 Q22 36 14 16" fill="none" stroke="#aaa" stroke-width="4"/><rect x="24" y="12" width="16" height="14" fill="#666"/><circle cx="32" cy="42" r="4" fill="#888"/>`,
+    diagscanner: `<rect x="14" y="8" width="36" height="48" rx="3" fill="#333"/><rect x="18" y="14" width="28" height="16" fill="#9CECE3"/><text x="32" y="25" fill="#222" font-size="6" text-anchor="middle">OK</text><circle cx="24" cy="40" r="3" fill="#555"/><circle cx="40" cy="40" r="3" fill="#e44"/><rect x="20" y="48" width="24" height="4" fill="#555"/>`,
+    ratchetstrap: `<rect x="6" y="26" width="52" height="10" fill="#ff7a2e"/><rect x="22" y="20" width="20" height="22" rx="2" fill="#555"/><circle cx="32" cy="31" r="4" fill="#333"/>`,
+    laser: `<rect x="6" y="24" width="40" height="14" rx="2" fill="#444"/><rect x="40" y="26" width="10" height="10" fill="#f8a"/><path d="M50 31 L60 22 L60 40 Z" fill="#f8a"/><circle cx="16" cy="31" r="2" fill="#9CECE3"/><circle cx="24" cy="31" r="2" fill="#9CECE3"/>`,
+    tunacan: `<rect x="14" y="14" width="36" height="36" rx="4" fill="#888"/><rect x="18" y="20" width="28" height="14" fill="#222"/><text x="32" y="30" fill="#9CECE3" font-size="7" text-anchor="middle" font-weight="bold">LEO</text><circle cx="32" cy="42" r="3" fill="#e44"/>`,
+    collar: `<path d="M12 32 Q32 10 52 32" fill="none" stroke="#9CECE3" stroke-width="4"/><polygon points="24,40 40,40 32,54" fill="#f8a"/><rect x="28" y="36" width="8" height="6" fill="#666"/>`,
+    yarnball: `<circle cx="32" cy="32" r="18" fill="none" stroke="#f8a" stroke-width="3"/><path d="M18 24 Q32 12 46 26" fill="none" stroke="#9CECE3" stroke-width="2"/><path d="M16 40 Q32 54 50 32" fill="none" stroke="#ff7a2e" stroke-width="2"/><path d="M22 32 Q32 40 42 30" fill="none" stroke="#fff" stroke-width="1.5"/>`,
+    keycard: `<rect x="12" y="8" width="40" height="48" rx="2" fill="#333" transform="rotate(5 32 32)"/><rect x="18" y="18" width="12" height="10" fill="#ffeb3b"/><circle cx="42" cy="22" r="3" fill="#ff7a2e"/><circle cx="38" cy="30" r="2" fill="#ff7a2e"/><rect x="18" y="36" width="20" height="3" fill="#9CECE3"/>`,
+    visor: `<path d="M8 26 Q32 12 56 26 V44 H8 Z" fill="#9CECE3"/><path d="M16 32 L28 42 M36 30 L48 42" fill="none" stroke="#fff" stroke-width="2"/><polygon points="20,20 28,26 16,28" fill="#555"/>`,
+    fishpuck: `<ellipse cx="32" cy="44" rx="20" ry="8" fill="#333"/><circle cx="32" cy="36" r="7" fill="#9CECE3"/><path d="M18 24 Q32 10 46 24" fill="none" stroke="#9CECE3" stroke-width="2" stroke-dasharray="3 2"/><path d="M24 20 L28 24 L24 28" fill="none" stroke="#9CECE3" stroke-width="1.5"/>`,
+    nippouch: `<rect x="14" y="10" width="36" height="44" rx="3" fill="#888"/><rect x="16" y="12" width="32" height="12" fill="#ff7a2e"/><text x="32" y="21" fill="#fff" font-size="7" text-anchor="middle" font-weight="bold">NIP</text><circle cx="32" cy="38" r="8" fill="#222"/><ellipse cx="32" cy="38" rx="3" ry="7" fill="#9CECE3"/>`,
+    pawpad: `<rect x="10" y="44" width="44" height="8" fill="#555"/><ellipse cx="32" cy="28" rx="14" ry="8" fill="#f8a"/><circle cx="20" cy="18" r="5" fill="#f8a"/><circle cx="32" cy="14" r="5" fill="#f8a"/><circle cx="44" cy="18" r="5" fill="#f8a"/><rect x="28" y="36" width="8" height="10" fill="#666"/>`
+  };
+  return `<svg viewBox="0 0 64 64">${s[id] || `<circle cx="32" cy="32" r="12" fill="#666"/>`}</svg>`;
+}
+
+function cartSVG(view) {
+  if (view === 'front') return `<svg viewBox="0 0 360 240">
+    <!-- orange cage -->
+    <rect x="100" y="18" width="160" height="8" fill="#ff7a2e"/>
+    <rect x="100" y="18" width="8" height="42" fill="#ff7a2e"/>
+    <rect x="252" y="18" width="8" height="42" fill="#ff7a2e"/>
+    <!-- body -->
+    <rect x="60" y="68" width="240" height="90" rx="4" fill="#6a7588"/>
+    <!-- hood / cowl zone -->
+    <rect x="80" y="78" width="200" height="28" rx="2" fill="#5a6578"/>
+    <!-- bumper & lights zone -->
+    <rect x="70" y="112" width="220" height="36" rx="2" fill="#5a6578"/>
+    <!-- headlights -->
+    <rect x="90" y="122" width="28" height="12" fill="#eef8f6" rx="1"/>
+    <rect x="242" y="122" width="28" height="12" fill="#eef8f6" rx="1"/>
+    <!-- lower dark bumper -->
+    <rect x="50" y="158" width="260" height="14" fill="#1a1a1a" rx="1"/>
+    <!-- teal side elements (wheel areas) -->
+    <rect x="28" y="140" width="18" height="50" rx="2" fill="#2a6a6a"/>
+    <rect x="314" y="140" width="18" height="50" rx="2" fill="#2a6a6a"/>
+    <!-- tread-style tires -->
+    <ellipse cx="95" cy="185" rx="12" ry="24" fill="#1a1a1a"/>
+    <ellipse cx="265" cy="185" rx="12" ry="24" fill="#1a1a1a"/>
+  </svg>`;
+  if (view === 'side') return `<svg viewBox="0 0 360 240">
+    <!-- main body -->
+    <rect x="30" y="90" width="300" height="58" rx="3" fill="#6a7588"/>
+    <!-- front cabin section -->
+    <rect x="40" y="62" width="90" height="38" fill="#7a8598"/>
+    <!-- steering area -->
+    <rect x="95" y="68" width="32" height="24" rx="2" fill="#4a5568"/>
+    <!-- orange roll cage posts -->
+    <rect x="155" y="28" width="7" height="80" fill="#ff7a2e"/>
+    <rect x="210" y="28" width="7" height="80" fill="#ff7a2e"/>
+    <rect x="155" y="28" width="62" height="6" fill="#ff7a2e"/>
+    <!-- seat area -->
+    <rect x="170" y="58" width="40" height="28" fill="#8a96a8"/>
+    <rect x="215" y="60" width="32" height="26" fill="#8a96a8"/>
+    <!-- side skirt zone -->
+    <rect x="45" y="108" width="140" height="12" fill="#5a6578"/>
+    <!-- badge / label -->
+    <rect x="55" y="98" width="40" height="8" fill="#fff" rx="1"/>
+    <text x="75" y="104" fill="#222" font-size="5" text-anchor="middle" font-weight="600">MCT-01</text>
+    <!-- teal accent -->
+    <rect x="50" y="72" width="22" height="5" fill="#9CECE3"/>
+    <!-- side-profile wheels -->
+    <circle cx="75" cy="168" r="32" fill="#1a1a1a"/>
+    <circle cx="275" cy="168" r="32" fill="#1a1a1a"/>
+    <circle cx="75" cy="168" r="12" fill="#2a6a6a"/>
+    <circle cx="275" cy="168" r="12" fill="#2a6a6a"/>
+    <circle cx="75" cy="168" r="5" fill="#444"/>
+    <circle cx="275" cy="168" r="5" fill="#444"/>
+  </svg>`;
+  if (view === 'rear') return `<svg viewBox="0 0 360 240">
+    <!-- safety roll cage zone -->
+    <rect x="90" y="18" width="180" height="48" rx="3" fill="#4a5568"/>
+    <!-- body -->
+    <rect x="55" y="70" width="250" height="95" rx="4" fill="#6a7588"/>
+    <!-- fender / armrest bar -->
+    <rect x="70" y="78" width="220" height="16" fill="#5a6578"/>
+    <rect x="40" y="74" width="28" height="22" rx="2" fill="#333"/>
+    <rect x="292" y="74" width="28" height="22" rx="2" fill="#333"/>
+    <!-- rear step & taillights zone -->
+    <rect x="75" y="102" width="210" height="42" rx="2" fill="#5a6578"/>
+    <!-- red taillights -->
+    <rect x="95" y="112" width="18" height="10" fill="#ff5c6c" rx="1"/>
+    <rect x="247" y="112" width="18" height="10" fill="#ff5c6c" rx="1"/>
+    <!-- rear step -->
+    <rect x="110" y="130" width="140" height="6" fill="#444"/>
+    <!-- lower dark bumper -->
+    <rect x="45" y="165" width="270" height="14" fill="#1a1a1a" rx="1"/>
+    <!-- teal side elements -->
+    <rect x="22" y="145" width="16" height="48" rx="2" fill="#2a6a6a"/>
+    <rect x="322" y="145" width="16" height="48" rx="2" fill="#2a6a6a"/>
+    <!-- tread-style tires -->
+    <ellipse cx="90" cy="190" rx="11" ry="22" fill="#1a1a1a"/>
+    <ellipse cx="270" cy="190" rx="11" ry="22" fill="#1a1a1a"/>
+  </svg>`;
+  // top — matching assembly bay orientation (front at top)
+  return `<svg viewBox="0 0 360 240">
+    <!-- outer body -->
+    <rect x="70" y="12" width="220" height="216" rx="8" fill="#6a7588"/>
+    <!-- front bumper zone -->
+    <rect x="85" y="20" width="190" height="22" rx="3" fill="#5a6578"/>
+    <!-- hood / cowl -->
+    <rect x="95" y="48" width="170" height="28" rx="2" fill="#7a8598"/>
+    <!-- steering & dash area -->
+    <rect x="100" y="82" width="160" height="32" rx="2" fill="#5a6578"/>
+    <circle cx="210" cy="98" r="10" fill="none" stroke="#9CECE3" stroke-width="2" stroke-dasharray="3 2"/>
+    <!-- orange cross bar -->
+    <rect x="90" y="120" width="180" height="6" fill="#ff7a2e"/>
+    <circle cx="95" cy="123" r="4" fill="#1a1a1a"/>
+    <circle cx="265" cy="123" r="4" fill="#1a1a1a"/>
+    <!-- seats -->
+    <rect x="105" y="136" width="70" height="28" rx="2" fill="#8a96a8"/>
+    <rect x="185" y="136" width="70" height="28" rx="2" fill="#8a96a8"/>
+    <!-- side skirts -->
+    <rect x="58" y="70" width="12" height="120" rx="2" fill="#4a5568"/>
+    <rect x="290" y="70" width="12" height="120" rx="2" fill="#4a5568"/>
+    <!-- rear step & lights -->
+    <rect x="85" y="200" width="190" height="18" rx="3" fill="#5a6578"/>
+    <!-- wheel positions -->
+    <circle cx="80" cy="50" r="10" fill="#1a1a1a"/>
+    <circle cx="280" cy="50" r="10" fill="#1a1a1a"/>
+    <circle cx="80" cy="190" r="10" fill="#1a1a1a"/>
+    <circle cx="280" cy="190" r="10" fill="#1a1a1a"/>
+  </svg>`;
+}
+
+function init() {
+  $('startBtn').onclick = startGame;
+  $('nextBtn').onclick = nextRound;
+  $('againBtn').onclick = () => location.reload();
+  $('exitBtn').onclick = exitToLeo;
+  renderViews();
+}
+
+function startGame() {
+  hideAllScreens();
+  state.rounds = [...PUZZLES].sort(() => Math.random() - 0.5).slice(0, 3);
+  state.current = 0;
+  state.score = 0;
+  state.elapsed = 0;
+  state.startTime = Date.now();
+  $('score').textContent = 0;
+  loadRound();
+  clearInterval(state.timerId);
+  state.timerId = setInterval(() => {
+    state.elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+    $('timer').textContent = formatTime(state.elapsed);
+  }, 1000);
+  setupDrag();
+}
+
+function loadRound() {
+  const p = state.rounds[state.current];
+  state.needed = p.parts.map(id => ALL_PARTS.find(x => x.id === id)).filter(Boolean);
+  state.placed = new Set();
+  state.currentView = state.needed[0]?.view || 'side';
+  $('round').textContent = state.current + 1;
+  $('puzzleName').textContent = p.name;
+  renderRequired();
+  renderCart();
+  renderPile();
+  updateViewButtons();
+}
+
+function renderViews() {
+  const c = $('viewControls');
+  c.innerHTML = '';
+  VIEWS.forEach(v => {
+    const b = document.createElement('button');
+    b.className = 'view-btn';
+    b.textContent = VIEW_LABELS[v];
+    b.onclick = () => { state.currentView = v; renderCart(); updateViewButtons(); };
+    c.appendChild(b);
+  });
+}
+
+function updateViewButtons() {
+  document.querySelectorAll('.view-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === VIEW_LABELS[state.currentView]);
+  });
+}
+
+function renderRequired() {
+  const box = $('required');
+  box.innerHTML = '';
+  state.needed.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'req-item' + (state.placed.has(p.id) ? ' done' : '');
+    const viewLabel = VIEW_LABELS[p.view] || p.view;
+    el.innerHTML = svgFor(p.id) + `<div>${p.name}<br><span style="font-size:10px;color:#9CECE3">${viewLabel}</span></div><div class="status">${state.placed.has(p.id) ? 'OK' : ''}</div>`;
+    box.appendChild(el);
+  });
+}
+
+function renderCart() {
+  const view = $('cartView');
+  view.innerHTML = cartSVG(state.currentView);
+  const positions = {
+    front: { bumper: [30, 58], hood: [36, 32], steer: [42, 18], ecu: [52, 42], pedals: [28, 48], steerrack: [48, 52], fan: [22, 38], cluster: [58, 28], radiator: [24, 44], mastercyl: [36, 50], winch: [46, 22], skidplate: [32, 64] },
+    side: { wheel: [6, 66], skirt: [24, 46], fender: [54, 50], pump: [32, 32], brake: [62, 56], coilover: [16, 58], mirror: [38, 28], reservoir: [28, 38], fluidfilter: [42, 52], hose: [50, 40], snorkel: [22, 24], leafspring: [48, 64] },
+    rear: { lights: [34, 44], axle: [40, 62], motor: [44, 30], harness: [38, 40], fusebox: [52, 36], hitch: [46, 70], compressor: [28, 32], valves: [56, 46], moisture: [42, 54], latch: [60, 58], triangle: [22, 40], barrier: [50, 28], tailgate: [38, 66], auxbattery: [64, 48] },
+    top: { cage: [48, 48], seat: [22, 58], battery: [62, 58], relay: [66, 48], swheel: [58, 38], strobe: [42, 12], anchor: [28, 68] }
+  };
+  const posMap = positions[state.currentView] || {};
+  state.needed.forEach(p => {
+    if (p.view !== state.currentView) return;
+    const pos = posMap[p.id] || [40, 40];
+    const hs = document.createElement('div');
+    hs.className = 'hotspot' + (state.placed.has(p.id) ? ' filled' : '');
+    hs.style.left = pos[0] + '%';
+    hs.style.top = pos[1] + '%';
+    hs.style.width = '64px';
+    hs.style.height = '64px';
+    hs.innerHTML = svgFor(p.id);
+    view.appendChild(hs);
+  });
+}
+
+function tick() {
+  state.elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+  updateTimer();
+}
+
+function updateTimer() {
+  const m = Math.floor(state.elapsed / 60);
+  const s = String(state.elapsed % 60).padStart(2, '0');
+  $('timer').textContent = `${m}:${s}`;
+}
+
+function setupDrag() {
+  const bench = $('workbench');
+  function onDown(e) {
+    const item = e.target.closest('.item');
+    if (!item) return;
+    e.preventDefault();
+    state.dragging = item;
+    item.classList.add('dragging');
+    item.style.zIndex = 200;
+    const r = item.getBoundingClientRect();
+    const client = e.touches ? e.touches[0] : e;
+    state.offset = { x: client.clientX - r.left, y: client.clientY - r.top };
+
+    // Push nearby items away with momentum when snatched
+    const grabCx = r.left + r.width / 2;
+    const grabCy = r.top + r.height / 2;
+    document.querySelectorAll('.item:not(.dragging)').forEach(other => {
+      const or = other.getBoundingClientRect();
+      const ocx = or.left + or.width / 2;
+      const ocy = or.top + or.height / 2;
+      const dx = ocx - grabCx;
+      const dy = ocy - grabCy;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 130 && dist > 8) {
+        const force = (130 - dist) / 130 * 4.2;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        if (!other._vel) other._vel = { x: 0, y: 0 };
+        other._vel.x += nx * force;
+        other._vel.y += ny * force;
+      }
+    });
+  }
+  function onMove(e) {
+    if (!state.dragging) return;
+    e.preventDefault();
+    const client = e.touches ? e.touches[0] : e;
+    const benchR = bench.getBoundingClientRect();
+    let x = client.clientX - benchR.left - state.offset.x;
+    let y = client.clientY - benchR.top - state.offset.y;
+    x = Math.max(0, Math.min(benchR.width - 80, x));
+    y = Math.max(0, Math.min(benchR.height - 80, y));
+    state.dragging.style.left = x + 'px';
+    state.dragging.style.top = y + 'px';
+  }
+  function onUp(e) {
+    if (!state.dragging) return;
+    const client = e.changedTouches ? e.changedTouches[0] : e;
+    const id = state.dragging.dataset.id;
+    const correct = state.dragging.dataset.correct === 'true';
+    const part = ALL_PARTS.find(p => p.id === id);
+    const viewOk = part && part.view === state.currentView;
+    const cartR = $('cartView').getBoundingClientRect();
+    const overCart = client.clientX > cartR.left && client.clientX < cartR.right &&
+                     client.clientY > cartR.top && client.clientY < cartR.bottom;
+
+    if (overCart && correct && viewOk && !state.placed.has(id)) {
+      state.placed.add(id);
+      state.score += 150 + Math.max(0, 90 - state.elapsed);
+      $('score').textContent = state.score;
+      state.dragging.remove();
+      renderRequired();
+      renderCart();
+      if (state.placed.size === state.needed.length) {
+        clearInterval(state.timerId);
+        setTimeout(() => {
+          if (state.current + 1 >= 3) {
+            const total = state.elapsed;
+            saveScore(total);
+            $('victoryMsg').innerHTML = `Time: ${formatTime(total)}<br>Score: ${state.score}<br><br>${renderLeaderboard()}`;
+            showScreen('victory');
+          } else {
+            $('roundMsg').textContent = `${state.rounds[state.current].name} repaired.`;
+            showScreen('roundClear');
+          }
+        }, 300);
+      }
+    } else {
+      // snap back if over cart (wrong) or if position would be under a HUD
+      const benchR = bench.getBoundingClientRect();
+      const x = parseFloat(state.dragging.style.left);
+      const y = parseFloat(state.dragging.style.top);
+      const itemW = 96, itemH = 96;
+
+      const assemblyR = $('assemblyHUD').getBoundingClientRect();
+      const assLeft = assemblyR.left - benchR.left;
+      const assTop = assemblyR.top - benchR.top;
+      const assRight = assLeft + assemblyR.width;
+      const assBottom = assTop + assemblyR.height;
+      const underHUD = x < assRight && x + itemW > assLeft && y < assBottom && y + itemH > assTop;
+
+      if (overCart || underHUD) {
+        state.dragging.style.left = state.dragging.dataset.origLeft;
+        state.dragging.style.top = state.dragging.dataset.origTop;
+        if (overCart) {
+          state.dragging.classList.add('shake');
+          setTimeout(() => state.dragging && state.dragging.classList.remove('shake'), 300);
+        }
+      } else {
+        state.dragging.dataset.origLeft = state.dragging.style.left;
+        state.dragging.dataset.origTop = state.dragging.style.top;
+      }
+    }
+    if (state.dragging) state.dragging.classList.remove('dragging');
+    state.dragging = null;
+  }
+  bench.addEventListener('mousedown', onDown);
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  bench.addEventListener('touchstart', onDown, { passive: false });
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchend', onUp);
+
+  // Continuous momentum drift for zero-g items
+  function driftLoop() {
+    const bench = $('workbench');
+    if (!bench) return;
+    const benchR = bench.getBoundingClientRect();
+    const assembly = $('assemblyHUD');
+    const assR = assembly ? assembly.getBoundingClientRect() : null;
+    const assBottom = assR ? (assR.bottom - benchR.top + 8) : 0;
+    const maxX = benchR.width - 100;
+    const maxY = benchR.height - 100;
+
+    document.querySelectorAll('.item:not(.dragging)').forEach(item => {
+      if (!item._vel) return;
+      let vx = item._vel.x;
+      let vy = item._vel.y;
+      if (Math.abs(vx) < 0.05 && Math.abs(vy) < 0.05) {
+        item._vel = null;
+        return;
+      }
+      let left = parseFloat(item.style.left) || 0;
+      let top = parseFloat(item.style.top) || 0;
+      left += vx;
+      top += vy;
+      // friction
+      vx *= 0.96;
+      vy *= 0.96;
+      // clamp to junk pile area (below assembly HUD, inside screen)
+      left = Math.max(8, Math.min(maxX, left));
+      top = Math.max(assBottom, Math.min(maxY, top));
+      // bounce off edges
+      if (left <= 8 || left >= maxX) vx *= -0.5;
+      if (top <= assBottom || top >= maxY) vy *= -0.5;
+      item.style.left = left + 'px';
+      item.style.top = top + 'px';
+      item.dataset.origLeft = item.style.left;
+      item.dataset.origTop = item.style.top;
+      item._vel.x = vx;
+      item._vel.y = vy;
+    });
+    requestAnimationFrame(driftLoop);
+  }
+  requestAnimationFrame(driftLoop);
+}
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = String(sec % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function saveScore(time) {
+  try {
+    let board = JSON.parse(localStorage.getItem('mctRepairsLB') || '[]');
+    board.push({ time, date: new Date().toLocaleDateString() });
+    board.sort((a, b) => a.time - b.time);
+    board = board.slice(0, 8);
+    localStorage.setItem('mctRepairsLB', JSON.stringify(board));
+  } catch (e) {
+    if (!window._mctLB) window._mctLB = [];
+    window._mctLB.push({ time, date: new Date().toLocaleDateString() });
+    window._mctLB.sort((a, b) => a.time - b.time);
+    window._mctLB = window._mctLB.slice(0, 8);
+  }
+}
+
+function renderLeaderboard() {
+  let board = [];
+  try { board = JSON.parse(localStorage.getItem('mctRepairsLB') || '[]'); }
+  catch (e) { board = window._mctLB || []; }
+  if (!board.length) return 'No times yet — be the first!';
+  return '<div style="text-align:left;font-size:13px;margin-top:8px">' +
+    board.map((e, i) => `${i+1}. ${formatTime(e.time)} <span style="color:#8b97a8">(${e.date})</span>`).join('<br>') +
+    '</div>';
+}
+
+function nextRound() { state.current++; hideAllScreens(); loadRound(); }
+function showScreen(id) { $(id).classList.add('show'); }
+function hideAllScreens() { document.querySelectorAll('.screen').forEach(s => s.classList.remove('show')); }
+function exitToLeo() {
+  clearInterval(state.timerId);
+  if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'mct-repairs-exit' }, '*');
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#9CECE3;font-size:22px">Returning to Leo…</div>';
+}
+init();
+</script>
+</body>
+</html>
