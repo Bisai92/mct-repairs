@@ -83,14 +83,14 @@
     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
   }
   #assemblyHUD {
-    top: 16px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 16px; align-items: flex-start;
-    width: 920px; min-height: 460px;
+    top: 8px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 14px; align-items: stretch;
+    width: min(96vw, 1400px); height: calc(50vh - 40px); min-height: 380px;
     background: rgba(10, 18, 28, 0.72);
     backdrop-filter: blur(14px);
     border: 1px solid rgba(156, 236, 227, 0.45);
     border-radius: 12px;
-    padding: 14px;
+    padding: 12px;
     box-shadow: 0 0 24px rgba(156, 236, 227, 0.18), inset 0 0 40px rgba(156, 236, 227, 0.04);
     position: relative;
     overflow: hidden;
@@ -108,11 +108,12 @@
     pointer-events: none;
   }
   #requiredHUD {
-    width: 210px; height: 430px; overflow-y: auto;
+    width: 200px; height: 100%; overflow-y: auto;
     pointer-events: none;
     background: none; border: none; box-shadow: none; padding: 0;
     scrollbar-width: none;
     position: relative; z-index: 1;
+    flex-shrink: 0;
   }
   #requiredHUD::-webkit-scrollbar { display: none; }
   #requiredHUD h2, #cartHUD h2 { 
@@ -128,12 +129,13 @@
   .req-item svg { width: 20px; height: 20px; flex-shrink: 0; }
   .status { margin-left: auto; font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #333; }
   #cartHUD {
-    width: 680px;
+    flex: 1; min-width: 0;
     background: none; border: none; box-shadow: none; padding: 0;
     position: relative; z-index: 1;
+    display: flex; flex-direction: column;
   }
   .cart-view {
-    width: 100%; height: 300px; position: relative;
+    width: 100%; flex: 1; min-height: 240px; position: relative;
     background: rgba(0, 12, 20, 0.4);
     border: 1px solid rgba(156, 236, 227, 0.2);
     border-radius: 8px; overflow: hidden;
@@ -182,21 +184,23 @@
   button.secondary { background: #2a3140; color: var(--text); }
   .shake { animation: shake 0.35s; }
   @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-  #diagLog {
-    position: fixed; top: 72px; left: 50%; transform: translateX(-50%);
-    background: rgba(10, 18, 28, 0.94); border: 1px solid rgba(255, 122, 46, 0.6);
-    border-radius: 10px; padding: 12px 18px; z-index: 150;
-    max-width: 520px; text-align: center;
-    box-shadow: 0 0 20px rgba(255, 122, 46, 0.25);
-    opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  #diagBubble {
+    position: absolute; top: 10px; right: 10px;
+    width: 220px; max-height: calc(100% - 20px);
+    background: rgba(10, 18, 28, 0.88);
+    border: 1px solid rgba(255, 122, 46, 0.5);
+    border-radius: 8px; padding: 10px 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    pointer-events: none; z-index: 5;
+    overflow-y: auto;
   }
-  #diagLog.show { opacity: 1; pointer-events: auto; }
-  #diagLog .diag-label {
-    font-size: 10px; letter-spacing: 1.5px; color: #ff7a2e; text-transform: uppercase;
-    margin-bottom: 4px;
+  #diagBubble .diag-label {
+    font-size: 9px; letter-spacing: 1.2px; color: #ff7a2e; text-transform: uppercase;
+    margin-bottom: 4px; font-weight: 600;
   }
-  #diagLog .diag-text { font-size: 14px; color: #eef2f7; line-height: 1.4; }
-  #diagLog .diag-hint { font-size: 11px; color: #8b97a8; margin-top: 6px; }
+  #diagBubble .diag-text {
+    font-size: 12px; color: #eef2f7; line-height: 1.35;
+  }
 </style>
 </head>
 <body>
@@ -220,7 +224,12 @@
       <div id="cartHUD">
         <h2>MCT-01 Assembly</h2>
         <div class="view-controls" id="viewControls"></div>
-        <div class="cart-view" id="cartView"></div>
+        <div class="cart-view" id="cartView">
+          <div id="diagBubble">
+            <div class="diag-label">Diagnostic</div>
+            <div class="diag-text" id="diagText">Awaiting scan…</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -230,11 +239,6 @@
   <h2>MCT REPAIRS</h2>
   <p>Full-screen service bay time trial. Dig through the workbench, cycle the MCT views, and install the required parts as fast as you can.</p>
   <button id="startBtn">Start Game</button>
-</div>
-<div id="diagLog">
-  <div class="diag-label">Diagnostic Log</div>
-  <div class="diag-text" id="diagText"></div>
-  <div class="diag-hint">Cross-check the Required Parts list · dismisses in 6s</div>
 </div>
 <div class="screen" id="roundClear"><h2>Round Clear</h2><p id="roundMsg">Systems restored.</p><button id="nextBtn">Next Round</button></div>
 <div class="screen" id="victory"><h2>All Repairs Complete</h2><p id="victoryMsg">MCT fleet is operational.</p><button id="againBtn">Play Again</button></div>
@@ -538,12 +542,7 @@ function loadRound() {
 }
 
 function showDiagnostic(text) {
-  const log = $('diagLog');
   $('diagText').textContent = text || 'Systems scan complete. Proceed with repairs.';
-  log.classList.add('show');
-  clearTimeout(state.diagTimer);
-  state.diagTimer = setTimeout(() => log.classList.remove('show'), 6000);
-  log.onclick = () => log.classList.remove('show');
 }
 
 function renderRequired() {
@@ -570,9 +569,9 @@ function renderPile() {
   const junk = Array.from({ length: junkCount }, (_, i) => ({ id: JUNK_EXTRA[i % JUNK_EXTRA.length], correct: false }));
   const all = [...correct, ...other, ...junk].sort(() => Math.random() - 0.5);
   const cx = w * 0.5;
-  const cy = h * 0.74;
+  const cy = h * 0.78;
   const spreadX = Math.min(w * 0.46, 1100);
-  const spreadY = Math.min(h * 0.22, 280);
+  const spreadY = Math.min(h * 0.18, 220);
   const assemblyR = $('assemblyHUD').getBoundingClientRect();
   const benchR = bench.getBoundingClientRect();
   const assLeft = assemblyR.left - benchR.left - 20;
@@ -593,7 +592,7 @@ function renderPile() {
       left = cx + Math.cos(angle) * r * spreadX - 48;
       top = cy + Math.sin(angle) * r * spreadY - 48;
       left = Math.max(16, Math.min(w - 112, left));
-      top = Math.max(h * 0.42, Math.min(h - 112, top));
+      top = Math.max(h * 0.52, Math.min(h - 112, top));
       attempts++;
     } while (attempts < 12 && (left > assLeft && left < assRight && top < assBottom));
     if (left > assLeft && left < assRight && top < assBottom) top = Math.max(assBottom + 10, top);
@@ -609,7 +608,9 @@ function renderPile() {
 
 function renderCart() {
   const view = $('cartView');
+  const diag = $('diagBubble');
   view.innerHTML = cartSVG(state.currentView);
+  if (diag) view.appendChild(diag);
   const positions = {
     front: { bumper: [30, 58], hood: [36, 32], steer: [42, 18], ecu: [52, 42], pedals: [28, 48], steerrack: [48, 52], fan: [22, 38], cluster: [58, 28], radiator: [24, 44], mastercyl: [36, 50], winch: [46, 22], skidplate: [32, 64] },
     side: { wheel: [6, 66], skirt: [24, 46], fender: [54, 50], pump: [32, 32], brake: [62, 56], coilover: [16, 58], mirror: [38, 28], reservoir: [28, 38], fluidfilter: [42, 52], hose: [50, 40], snorkel: [22, 24], leafspring: [48, 64] },
